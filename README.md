@@ -15,6 +15,15 @@ This is the NoICE Monitor for the TRS-80/Tandy Color Computer.
 *               in the region of $8000-$FFFF (ROM).
 *               In short, this monitor can be used with NoICE09 and
 *               NoICE6309 without recompiling.
+*     10-Oct-22 Michael Furman - Fixes for Correct 6551 UART Operation.
+*               The original code from RG was resetting and reprogramming
+*               the UART for every operation.  This causes the UART to stop
+*               transmitting in the middle of a byte resulting in garbage.
+*               The second fix - Each time the monitor is entered, whether
+*               it is via cold start or any interrupt the current registers
+*               are sent back.  This should be the FN_READ_RG command but
+*               FN_GET_STAT was being sent instead, causing NoICE to get
+*               confused.
 *============================================================================
 *
 *  To customize for a given target, you must change code in the

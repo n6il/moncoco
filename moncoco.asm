@@ -1,4 +1,4 @@
-*  6809/6309 Debug monitor for use with NOICE09 6809/6309 versions on Color Computer
+* 6809/6309 Debug monitor for use with NOICE09 6809/6309 versions on Color Computer
 *
 *  Copyright (c) 1992-2006 by John Hartman
 *
@@ -12,6 +12,15 @@
 *               in the region of $8000-$FFFF (ROM).
 *               In short, this monitor can be used with NoICE09 and
 *               NoICE6309 without recompiling.
+*     10-Oct-22 Michael Furman - Fixes for Correct 6551 UART Operation.
+*               The original code from RG was resetting and reprogramming
+*               the UART for every operation.  This causes the UART to stop
+*               transmitting in the middle of a byte resulting in garbage.
+*               The second fix - Each time the monitor is entered, whether
+*               it is via cold start or any interrupt the current registers
+*               are sent back.  This should be the FN_READ_RG command but
+*               FN_GET_STAT was being sent instead, causing NoICE to get
+*               confused.
 *============================================================================
 *
 *  To customize for a given target, you must change code in the
@@ -47,7 +56,7 @@ CODE_START       EQU     $F00           START OF MONITOR CODE
 HARD_VECT        EQU     $100           START OF HARDWARE VECTORS
 MPI              EQU     $FF7F          Multi-Pack Interface
 * Change the next line to match the location of your RS-232 pack.
-SLOT             EQU     1              0=SLOT1, 1=SLOT2, 2=SLOT3, 3=SLOT4
+SLOT             EQU     0              0=SLOT1, 1=SLOT2, 2=SLOT3, 3=SLOT4
 
 *============================================================================
 *  Equates for memory mapped 6551 serial port in the Tandy RS-232 pack.
@@ -200,6 +209,8 @@ RES20   LDA     ,X+
 *
 *  Initialize user registers
          LDS     STACK_IMG,PCR            RECOVER USER STACK
+         LDA	 #FN_READ_RG              INITIAL COMMAND
+         STA	 COMBUF,PCR
          CLRA                             INDICATE A RESET
          LBRA    INT_ENTRY                ENTER MONITOR
 *
@@ -287,7 +298,7 @@ INT_ENTRY
         PULS    D
         EXG     A,B
         STD     REG_B,PCR           D 
-        TST     CPU                 6809 or 6309?
+        TST     CPU,PCR             6809 or 6309?
         BNE     IE_1
         LDA     MDDEF,PCR
         BITA    #1                   emulation or native mode?
@@ -791,6 +802,21 @@ SND10   LDA     ,X+
         LBSR     PUTCHAR                SEND A BYTE
         DECB
         BNE      SND10
+*
+* The 6551 UART in MAME will send corrupt data
+* If it is interrupted in the middle of transmitting
+* 1. Wait for the TXRE Register to clear
+* 2. Wait one byte time for last byte to finish transmitting
+* 3. Continue on to main
+*       Wait for TXRE
+ULP1    LDA     SER_STATUS      CHECK TX STATUS
+        ANDA    #TXRDY          RX READY ?
+        BEQ     ULP1
+*       Delay one byte time (10 bits) at 9600 baud
+        LDA	#19*10
+ULP2    DECA		(2)
+        BNE	ULP2	(3)
+*
         LBRA     MAIN                   BACK TO MAIN LOOP
 
 *===========================================================================
